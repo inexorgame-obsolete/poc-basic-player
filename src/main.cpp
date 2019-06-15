@@ -3,6 +3,11 @@
 #include <thread>
 #include <list>
 
+#include <Magnum/GL/DefaultFramebuffer.h>
+#include <Magnum/GL/Mesh.h>
+#include <Magnum/GL/Renderer.h>
+#include <Magnum/Platform/GLContext.h>
+
 #include <GLFW/glfw3.h>
 
 struct Player
@@ -47,20 +52,33 @@ struct World
 
 GLFWwindow* glfw_window;
 
+
+
+using namespace std::chrono_literals;
+using namespace Magnum;
+
 void create_window()
 {
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2);
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 	glfw_window = glfwCreateWindow(1024, 800, "POC-BASIC-PLAYER", nullptr, nullptr);
+    GL::Renderer::enable(GL::Renderer::Feature::DepthTest);
+    GL::Renderer::enable(GL::Renderer::Feature::FaceCulling);
+
+    glfwMakeContextCurrent(glfw_window);
+
 }
 
 void render(const World& world)
 {
 
-}
+    GL::defaultFramebuffer.clear(GL::FramebufferClear::Color|GL::FramebufferClear::Depth);
 
-using namespace std::chrono_literals;
+//    _camera->draw(_drawables);
+
+    glfwSwapBuffers(glfw_window);
+}
 
 int main()
 {
@@ -84,6 +102,9 @@ int main()
 	if(!glfwInit()) std::exit(1);
 
 	create_window();
+
+	// Create Magnum context in an isolated scope
+	Magnum::Platform::GLContext ctx{};
 
 	while (true) {
 		render(world);
