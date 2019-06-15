@@ -30,3 +30,25 @@
 *.exe
 *.out
 *.app
+
+# Output folders
+bin/
+build/
+documentation/
+assets/
+
+/desktop.ini
+/dependencies
+/.vs
+/EntitySystem.sln
+/EntitySystem
+/CMakeCache.txt
+/.cproject
+/.project
+/.settings
+/inexor.log
+*.DS_STORE
+/.conan
+/.cache
+*.user
+
