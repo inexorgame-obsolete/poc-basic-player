@@ -1,115 +1,57 @@
-#include <memory>
-#include <chrono>
-#include <thread>
-#include <list>
-
+#include <Magnum/GL/Buffer.h>
 #include <Magnum/GL/DefaultFramebuffer.h>
 #include <Magnum/GL/Mesh.h>
+#include <Magnum/Platform/GlfwApplication.h>
+#include <Magnum/Shaders/VertexColor.h>
 #include <Magnum/GL/Renderer.h>
-#include <Magnum/Platform/GLContext.h>
 
-#include <GLFW/glfw3.h>
-
-struct Player
-{
-
-	struct Position {
-		double x, y, z;
-	};
-
-	struct Dimensions {
-		double width, height, depth;
-	};
-
-	struct Orientation {
-		double yaw, pitch, roll;
-	};
-
-	Position position;
-	Dimensions dimensions;
-	Orientation orientation;
-
-};
-
-const double BLOCK_SIZE = 10.0;
-
-struct Block
-{
-
-	struct Position {
-		double x, y, z;
-	};
-
-	Position position;
-
-};
-
-struct World
-{
-	Player player;
-	std::list<Block> blocks;
-};
-
-GLFWwindow* glfw_window;
-
-
-
-using namespace std::chrono_literals;
 using namespace Magnum;
 
-void create_window()
+class TriangleExample: public Platform::Application {
+public:
+    explicit TriangleExample(const Arguments& arguments);
+
+private:
+    void drawEvent() override;
+
+    GL::Mesh _mesh;
+    Shaders::VertexColor2D _shader;
+};
+
+TriangleExample::TriangleExample(const Arguments& arguments):
+        Platform::Application{arguments, Configuration{}.setTitle("Magnum Triangle Example")}
 {
-	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2);
-	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-	glfw_window = glfwCreateWindow(1024, 800, "POC-BASIC-PLAYER", nullptr, nullptr);
+
     GL::Renderer::enable(GL::Renderer::Feature::DepthTest);
     GL::Renderer::enable(GL::Renderer::Feature::FaceCulling);
+    using namespace Math::Literals;
 
-    glfwMakeContextCurrent(glfw_window);
+    struct TriangleVertex {
+        Vector2 position;
+        Color3 color;
+    };
+    const TriangleVertex data[]{
+            {{-0.5f, -0.5f}, 0xff0000_rgbf},    /* Left vertex, red color */
+            {{ 0.5f, -0.5f}, 0x00ff00_rgbf},    /* Right vertex, green color */
+            {{ 0.0f,  0.5f}, 0x0000ff_rgbf}     /* Top vertex, blue color */
+    };
 
+    GL::Buffer buffer;
+    buffer.setData(data);
+
+    _mesh.setCount(3)
+            .addVertexBuffer(std::move(buffer), 0,
+                             Shaders::VertexColor2D::Position{},
+                             Shaders::VertexColor2D::Color3{});
 }
 
-void render(const World& world)
-{
+void TriangleExample::drawEvent() {
+    GL::defaultFramebuffer.clear(GL::FramebufferClear::Color);
 
-    GL::defaultFramebuffer.clear(GL::FramebufferClear::Color|GL::FramebufferClear::Depth);
+    _mesh.draw(_shader);
 
-//    _camera->draw(_drawables);
-
-    glfwSwapBuffers(glfw_window);
+    swapBuffers();
 }
 
-int main()
-{
-	Player you = {
-		{ 0.0, 0.0, 0.0 },
-		{ 1.0, 1.0, 1.0 },
-		{ 1.0, 0.0, 0.0 }
-	};
-	Block block1 = {
-		{ 10.0, 0.0, 0.0 }
-	};
-	Block block2 = {
-		{ 0.0, 10.0, 0.0 }
-	};
 
-	World world = {
-		you,
-		{{ block1, block2 }}
-	};
-
-	if(!glfwInit()) std::exit(1);
-
-	create_window();
-
-	// Create Magnum context in an isolated scope
-	Magnum::Platform::GLContext ctx{};
-
-	while (true) {
-		render(world);
-		// 60 fps
-	    std::this_thread::sleep_for(16ms);
-	}
-
-}
+MAGNUM_APPLICATION_MAIN(TriangleExample)
