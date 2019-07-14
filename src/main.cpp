@@ -15,12 +15,17 @@ using namespace Magnum::Math::Literals;
 
 /*
 TODO:
- - Camera matrix richtig
- - Keys WASD
- - Add Octree Datastructure
+ - [DONE] Camera matrix richtig
+ - [DONE] Keys WASD
+ - [DONE] fix camera resetting
+ - walk in camera direction
+ - intermediate frames
+ - add coordinate systems (local + global)
+
+ - Octree Datastructure
+ - Add / Remove Octree Datenstructure
  - Convert Octree -> Mesh
  - Select Octree Cube
- - Add / Remove Octree Datenstructure
  - Update Mesh wenn Add / Remove
  */
 
@@ -72,8 +77,9 @@ struct Camera {
     Matrix4 _projection_matrix;
 
     Camera(float aspect_ratio) {
+        // constexpr float eyeheight = 18;
         constexpr float eyeheight = 18;
-        position = Vector3(0, eyeheight, -1);
+        position = Vector3(0, 0, -1);
         _projection_matrix =
                 Matrix4::perspectiveProjection(
                         35.0_degf, aspect_ratio, 0.01f, 100.0f)*
@@ -111,12 +117,44 @@ void fix_camera_range(Camera &camera)
  TODO: maybe this is already handled by the type wrappers?
  */
 }
-
 void Camera::reorientate(const Rad &delta_yaw, const Rad &delta_pitch) {
     yaw += delta_yaw;
     pitch += delta_pitch;
     fix_camera_range(*this);
 }
+
+/// A class to contain the Meshes and data to be rendered by a Renderer.
+struct RendererWorld {
+    GL::Buffer _indexBuffer, _vertexBuffer;
+    GL::Mesh _mesh;
+    Shaders::Phong _shader;
+    Color3 _color;
+    RendererWorld() {
+
+        const Trade::MeshData3D cube = Primitives::cubeSolid();
+
+        _vertexBuffer.setData(MeshTools::interleave(cube.positions(0), cube.normals(0)));
+
+        Containers::Array<char> indexData;
+        MeshIndexType indexType;
+        UnsignedInt indexStart, indexEnd;
+        std::tie(indexData, indexType, indexStart, indexEnd) =
+                MeshTools::compressIndices(cube.indices());
+        _indexBuffer.setData(indexData);
+
+        _mesh.setPrimitive(cube.primitive())
+                .setCount(cube.indices().size())
+                .addVertexBuffer(_vertexBuffer, 0, Shaders::Phong::Position{},
+                                 Shaders::Phong::Normal{})
+                .setIndexBuffer(_indexBuffer, 0, indexType, indexStart, indexEnd);
+
+        _color = Color3::fromHsv({35.0_degf, 1.0f, 1.0f});
+    }
+};
+
+struct OctreeRenderer {
+
+};
 
 class PrimitivesExample: public Platform::Application {
 public:
@@ -127,12 +165,9 @@ private:
     void mouseMoveEvent(MouseMoveEvent& event) override;
     void keyPressEvent(KeyEvent& event) override;
 
-    GL::Buffer _indexBuffer, _vertexBuffer;
-    GL::Mesh _mesh;
-    Shaders::Phong _shader;
     Camera camera;
+    RendererWorld world;
     Vector2i _previousMousePosition;
-    Color3 _color;
 };
 
 PrimitivesExample::PrimitivesExample(const Arguments& arguments):
@@ -141,25 +176,6 @@ PrimitivesExample::PrimitivesExample(const Arguments& arguments):
 {
     GL::Renderer::enable(GL::Renderer::Feature::DepthTest);
     GL::Renderer::enable(GL::Renderer::Feature::FaceCulling);
-
-    const Trade::MeshData3D cube = Primitives::cubeSolid();
-
-    _vertexBuffer.setData(MeshTools::interleave(cube.positions(0), cube.normals(0)));
-
-    Containers::Array<char> indexData;
-    MeshIndexType indexType;
-    UnsignedInt indexStart, indexEnd;
-    std::tie(indexData, indexType, indexStart, indexEnd) =
-            MeshTools::compressIndices(cube.indices());
-    _indexBuffer.setData(indexData);
-
-    _mesh.setPrimitive(cube.primitive())
-            .setCount(cube.indices().size())
-            .addVertexBuffer(_vertexBuffer, 0, Shaders::Phong::Position{},
-                             Shaders::Phong::Normal{})
-            .setIndexBuffer(_indexBuffer, 0, indexType, indexStart, indexEnd);
-
-    _color = Color3::fromHsv({35.0_degf, 1.0f, 1.0f});
 }
 
 void PrimitivesExample::drawEvent() {
@@ -168,14 +184,14 @@ void PrimitivesExample::drawEvent() {
 
     const Matrix4 _projection = camera.get_projection_matrix();
     const Matrix4 _transformation = camera.get_transformation_matrix();
-    _shader.setLightPosition({7.0f, 5.0f, 2.5f})
+    world._shader.setLightPosition({7.0f, 5.0f, 2.5f})
             .setLightColor(Color3{1.0f})
-            .setDiffuseColor(_color)
-            .setAmbientColor(Color3::fromHsv({_color.hue(), 1.0f, 0.3f}))
+            .setDiffuseColor(world._color)
+            .setAmbientColor(Color3::fromHsv({world._color.hue(), 1.0f, 0.3f}))
             .setTransformationMatrix(_transformation)
             .setNormalMatrix(_transformation.rotationScaling())
             .setProjectionMatrix(_projection);
-    _mesh.draw(_shader);
+    world._mesh.draw(world._shader);
 
     swapBuffers();
 }
@@ -188,13 +204,13 @@ void PrimitivesExample::keyPressEvent(KeyEvent& event) {
         case KeyEvent::Key::W: dir[1] = 1.0f; break;
         case KeyEvent::Key::S: dir[1] = -1.0f; break;
     }
-    move(camera.position, dir, 5, 1);
+    move(camera.position, dir, 1, 1);
     event.setAccepted();
     redraw();
 }
 
 void PrimitivesExample::mouseMoveEvent(MouseMoveEvent& event) {
-    if(!(event.buttons() & MouseMoveEvent::Button::Left)) return;
+    // if(!(event.buttons() & MouseMoveEvent::Button::Left)) return;
 
     const Vector2 delta = 3.0f*
                           Vector2{event.position() - _previousMousePosition}/
