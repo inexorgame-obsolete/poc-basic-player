@@ -7,7 +7,10 @@
 #include <Magnum/Platform/GlfwApplication.h>
 #include <Magnum/Primitives/Axis.h>
 #include <Magnum/Primitives/Cube.h>
+#include <Magnum/Primitives/Gradient.h>
 #include <Magnum/Shaders/Phong.h>
+#include <Magnum/Shaders/Flat.h>
+#include <Magnum/Shaders/VertexColor.h>
 #include <Magnum/Trade/MeshData3D.h>
 #include <iostream>
 #include <vector>
@@ -21,9 +24,11 @@ TODO:
  - [DONE] Camera matrix richtig
  - [DONE] Keys WASD
  - [DONE] fix camera resetting
- - walk in camera direction
+ - [DONE] walk in camera direction
  - intermediate frames
- - add coordinate systems (local + global)
+ - [DONE] add coordinate systems (local + global)
+
+ - make renderables share code
 
  - Octree Datastructure
  - Add / Remove Octree Datenstructure
@@ -98,16 +103,18 @@ struct Camera {
                * Matrix4::translation(position);
     }
 
-    /// Return a rotation matrix which translates each vector to be rotated in
-    /// to the viewing direction.
-    /// Used e.g. if you want to get the vector which is in forward direction of
-    /// the camera.
+    /// Get the transformation world_coordinates_T_camera_local.
+    /// I.e. the transformation from camera local coordinates to world coordinates.
+    /// First column is camera local X direction, i.e. sidewards (right)
+    /// Second column is camera local Y direction, i.e. upwards
+    /// Third column is camera local Z direction, i.e. into the scene.
+    /// (each in world coordinates)
     Matrix3x3 get_orientation_matrix() {
         const auto rotation_translation_matrix = Matrix4::rotationY(-roll)
                                            * Matrix4::rotationX(pitch)
                                            * Matrix4::rotationZ(yaw);
 
-        return rotation_translation_matrix.rotation();
+        return rotation_translation_matrix.inverted().rotation();
     }
 
     /// Return the matrix which transforms 3D coordinates to 2D coordinates
@@ -139,46 +146,63 @@ void Camera::reorientate(const Rad &delta_yaw, const Rad &delta_pitch) {
 }
 
 /// A class to contain the Meshes and data to be rendered by a Renderer.
-struct Renderable {
+struct RendererWorld {
     GL::Buffer _indexBuffer, _vertexBuffer;
     GL::Mesh _mesh;
     Color3 _color;
     Shaders::Phong _shader;
-    // GL::AbstractShaderProgram _shader;
-    /*
-     * problem: each renderable may need another shader..
-     * so maybe make it a link?
-     * wohin constructor für beides?
-     * wohin draw functions? draw(camera, shader)
-     */
+    RendererWorld()
+    {
+        const Trade::MeshData3D cube = Primitives::cubeSolid();
+        // Primitives::gradient3DHorizontal(Color4{0, 1, 1, 1}, Color4{0, 0.9, 0.5, 1});
+        _vertexBuffer.setData(MeshTools::interleave(cube.positions(0), cube.normals(0)));
+
+        Containers::Array<char> indexData;
+        MeshIndexType indexType;
+        UnsignedInt indexStart, indexEnd;
+        std::tie(indexData, indexType, indexStart, indexEnd) =
+                MeshTools::compressIndices(cube.indices());
+        _indexBuffer.setData(indexData);
+
+        _mesh.setPrimitive(cube.primitive())
+                .setCount(cube.indices().size())
+                .addVertexBuffer(_vertexBuffer, 0, Shaders::Phong::Position{},
+                                 Shaders::Phong::Normal{})
+                .setIndexBuffer(_indexBuffer, 0, indexType, indexStart, indexEnd);
+
+        _color = Color3::fromHsv({35.0_degf, 1.0f, 0.3f});
+        _shader.setLightPosition({7.0f, 5.0f, 2.5f})
+                .setLightColor(Color3{1.0f})
+                .setDiffuseColor(_color)
+                .setAmbientColor(Color3::fromHsv({_color.hue(), 1.0f, 0.3f}));
+    }
 };
 
-Renderable create_world() {
-    Renderable w;
+/// A class to contain the Meshes and data to be rendered by a Renderer.
+/// But only those with a flat shader, i.e. editing and debug helpers and UI.
+struct RendererUIData {
+    GL::Buffer _indexBuffer, _vertexBuffer;
+    GL::Mesh _mesh;
+    Shaders::VertexColor3D _shader;
+    RendererUIData()
+    {
+        const Trade::MeshData3D data = Primitives::axis3D();
+        _vertexBuffer.setData(MeshTools::interleave(data.positions(0), data.colors(0)));
 
-    const Trade::MeshData3D cube = Primitives::cubeSolid();
-    w._vertexBuffer.setData(MeshTools::interleave(cube.positions(0), cube.normals(0)));
+        Containers::Array<char> indexData;
+        MeshIndexType indexType;
+        UnsignedInt indexStart, indexEnd;
+        std::tie(indexData, indexType, indexStart, indexEnd) =
+                MeshTools::compressIndices(data.indices());
+        _indexBuffer.setData(indexData);
 
-    Containers::Array<char> indexData;
-    MeshIndexType indexType;
-    UnsignedInt indexStart, indexEnd;
-    std::tie(indexData, indexType, indexStart, indexEnd) =
-            MeshTools::compressIndices(cube.indices());
-    w._indexBuffer.setData(indexData);
+        _mesh.setPrimitive(data.primitive())
+                .setCount(data.indices().size())
+                .addVertexBuffer(_vertexBuffer, 0, Shaders::VertexColor3D::Position{}, Shaders::VertexColor3D::Color4{})
+                .setIndexBuffer(_indexBuffer, 0, indexType, indexStart, indexEnd);
+    }
+};
 
-    w._mesh.setPrimitive(cube.primitive())
-            .setCount(cube.indices().size())
-            .addVertexBuffer(w._vertexBuffer, 0, Shaders::Phong::Position{},
-                             Shaders::Phong::Normal{})
-            .setIndexBuffer(w._indexBuffer, 0, indexType, indexStart, indexEnd);
-
-    w._color = Color3::fromHsv({35.0_degf, 1.0f, 1.0f});
-    w._shader.setLightPosition({7.0f, 5.0f, 2.5f})
-            .setLightColor(Color3{1.0f})
-            .setDiffuseColor(w._color)
-            .setAmbientColor(Color3::fromHsv({w._color.hue(), 1.0f, 0.3f}));
-    return std::move(w);
-}
 
 class PrimitivesExample: public Platform::Application {
 public:
@@ -190,9 +214,10 @@ private:
     void keyPressEvent(KeyEvent& event) override;
 
     Camera camera;
-    /// everything which is to be displayed: world geometry, editing helper geometry, ..
-    std::vector<Renderable> renderables;
-    std::unordered_map<int, GL::AbstractShaderProgram> shaders;
+    RendererWorld world;
+    // the rendered axis
+    RendererUIData axis[3];
+
     Vector2i _previousMousePosition;
 };
 
@@ -202,9 +227,6 @@ PrimitivesExample::PrimitivesExample(const Arguments& arguments):
 {
     GL::Renderer::enable(GL::Renderer::Feature::DepthTest);
     GL::Renderer::enable(GL::Renderer::Feature::FaceCulling);
-    // Geometry: position is -1 to 1
-    renderables.push_back(create_world());
-    //renderables.push_back(Renderable(Primitives::axis3D()));
 }
 
 void PrimitivesExample::drawEvent() {
@@ -213,30 +235,34 @@ void PrimitivesExample::drawEvent() {
 
     const Matrix4 _projection = camera.get_projection_matrix();
     const Matrix4 _transformation = camera.get_transformation_matrix();
-    for (auto &r : renderables)
-    {
-        r._shader.setTransformationMatrix(_transformation)
-                .setNormalMatrix(_transformation.rotationScaling())
-                .setProjectionMatrix(_projection);
-        r._mesh.draw(r._shader);
-    }
+    world._shader.setTransformationMatrix(_transformation)
+            .setNormalMatrix(_transformation.rotationScaling())
+            .setProjectionMatrix(_projection);
+    world._mesh.draw(world._shader);
+
+    const auto rotation_matrix = Matrix4::rotationY(-camera.roll)
+                                             * Matrix4::rotationX(camera.pitch)
+                                             * Matrix4::rotationZ(camera.yaw);
+    axis[0]._shader.setTransformationProjectionMatrix(_projection * _transformation);
+    axis[0]._mesh.draw(axis[0]._shader);
+    axis[1]._shader.setTransformationProjectionMatrix(_projection);
+    axis[1]._mesh.draw(axis[1]._shader);
 
     swapBuffers();
 }
 
 void PrimitivesExample::keyPressEvent(KeyEvent& event) {
-    // code from recompute_camera in sauerbraten.
-
-    // where do we look?
     auto orientation = camera.get_orientation_matrix();
-    Vector3 forward_dir = -orientation[1];
-    Vector3 side_dir = -orientation[0];
-    Vector3 up_dir = orientation[2];
+    Vector3 side_dir = orientation[0];
+    Vector3 up_dir = orientation[1];
+    Vector3 forward_dir = orientation[2];
     switch(event.key()) {
         case KeyEvent::Key::A: move(camera.position, side_dir, 1, 1); break;
         case KeyEvent::Key::D: move(camera.position, -side_dir, 1, 1); break;
         case KeyEvent::Key::W: move(camera.position, forward_dir, 1, 1); break;
         case KeyEvent::Key::S: move(camera.position, -forward_dir, 1, 1); break;
+        case KeyEvent::Key::Q: move(camera.position, up_dir, 1, 1); break;
+        case KeyEvent::Key::E: move(camera.position, -up_dir, 1, 1); break;
     }
     event.setAccepted();
     redraw();
@@ -262,3 +288,19 @@ void PrimitivesExample::mouseMoveEvent(MouseMoveEvent& event) {
 }
 
 MAGNUM_APPLICATION_MAIN(PrimitivesExample)
+
+
+/* inactive code:
+
+generic renderables:
+     /// everything which is to be displayed: world geometry, editing helper geometry, ..
+    std::vector<Renderable> renderables;
+    std::unordered_map<int, GL::AbstractShaderProgram> shaders;
+    // GL::AbstractShaderProgram _shader;
+
+     * problem: each renderable may need another shader..
+     * so maybe make it a link?
+     * wohin constructor für beides?
+     * wohin draw functions? draw(camera, shader)
+
+*/
