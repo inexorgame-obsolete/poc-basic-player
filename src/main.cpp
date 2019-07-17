@@ -7,6 +7,7 @@
 #include <Magnum/Platform/GlfwApplication.h>
 #include <Magnum/Primitives/Axis.h>
 #include <Magnum/Primitives/Cube.h>
+#include <Magnum/Primitives/Icosphere.h>
 #include <Magnum/Primitives/Gradient.h>
 #include <Magnum/Shaders/Phong.h>
 #include <Magnum/Shaders/Flat.h>
@@ -27,6 +28,7 @@ TODO:
  - [DONE] walk in camera direction
  - intermediate frames
  - [DONE] add coordinate systems (local + global)
+ - add Edit Helpers to scale the cube
 
  - make renderables share code
 
@@ -96,7 +98,7 @@ struct Camera {
 
     /// Return the matrix which transforms the world coordinates to coordinates
     /// in the camera local coordination frame.
-    Matrix4 get_transformation_matrix() {
+    Matrix4 get_transformation_matrix() const {
         return Matrix4::rotationY(-roll)
                * Matrix4::rotationX(pitch)
                * Matrix4::rotationZ(yaw)
@@ -109,17 +111,18 @@ struct Camera {
     /// Second column is camera local Y direction, i.e. upwards
     /// Third column is camera local Z direction, i.e. into the scene.
     /// (each in world coordinates)
-    Matrix3x3 get_orientation_matrix() {
+    Matrix3x3 get_orientation_matrix() const {
         const auto rotation_translation_matrix = Matrix4::rotationY(-roll)
                                            * Matrix4::rotationX(pitch)
                                            * Matrix4::rotationZ(yaw);
+        // TODO cache.
 
         return rotation_translation_matrix.inverted().rotation();
     }
 
     /// Return the matrix which transforms 3D coordinates to 2D coordinates
     /// based on the camera's fov and the window size.
-    Matrix4 get_projection_matrix() {
+    Matrix4 get_projection_matrix() const {
         return _projection_matrix;
     }
 
@@ -130,12 +133,12 @@ struct Camera {
 /// reset yaw and pitch, otherwise continously spinning around the own axis overflows them.
 void fix_camera_range(Camera &camera)
 {
-/*
     const Rad MAXPITCH = 90.0_degf;
     if(camera.pitch>MAXPITCH) camera.pitch = MAXPITCH;
     if(camera.pitch<-MAXPITCH) camera.pitch = -MAXPITCH;
-    while(camera.yaw<0.0_degf) camera.yaw += 360.0_degf;
-    while(camera.yaw>=360.0_degf) camera.yaw -= 360.0_degf;
+    while(camera.yaw<0.0_radf) camera.yaw += Rad(360.0_degf);
+    while(camera.yaw>=Rad(360.0_degf)) camera.yaw -= Rad(360.0_degf);
+/*
  TODO: maybe this is already handled by the type wrappers?
  */
 }
@@ -183,11 +186,10 @@ struct RendererWorld {
 struct RendererUIData {
     GL::Buffer _indexBuffer, _vertexBuffer;
     GL::Mesh _mesh;
-    Shaders::VertexColor3D _shader;
-    RendererUIData()
+    Shaders::Flat3D _shader;
+    RendererUIData(const Trade::MeshData3D data = Primitives::axis3D())
     {
-        const Trade::MeshData3D data = Primitives::axis3D();
-        _vertexBuffer.setData(MeshTools::interleave(data.positions(0), data.colors(0)));
+        _vertexBuffer.setData(MeshTools::interleave(data.positions(0))); // , data.colors(0)));
 
         Containers::Array<char> indexData;
         MeshIndexType indexType;
@@ -198,10 +200,45 @@ struct RendererUIData {
 
         _mesh.setPrimitive(data.primitive())
                 .setCount(data.indices().size())
-                .addVertexBuffer(_vertexBuffer, 0, Shaders::VertexColor3D::Position{}, Shaders::VertexColor3D::Color4{})
+                .addVertexBuffer(_vertexBuffer, 0, Shaders::Flat3D::Position{}) // , Shaders::VertexColor3D::Color4{})
                 .setIndexBuffer(_indexBuffer, 0, indexType, indexStart, indexEnd);
     }
 };
+
+
+/// A class to contain the Meshes and data to be rendered by a Renderer.
+/// But only those with a flat shader, i.e. editing and debug helpers and UI.
+struct EditHelper : RendererUIData {
+    Vector3 position;
+    static constexpr float radius = 0.5f;
+
+    EditHelper(const Vector3 &&pos) : RendererUIData(Primitives::icosphereSolid(1)), position(pos)
+    {
+    }
+};
+
+float raysphereintersect(const Vector3 &sphere_center, float sphere_radius,
+                        const Vector3 &ray_origin, const Vector3 &ray_directory)
+{
+    // vector between the two points
+    Vector3 c = Vector3(sphere_center);
+    c -= ray_origin;
+    // angle between the two points connection and the ray dir
+    float v = Math::dot(c, ray_directory);
+    float inside = sphere_radius*sphere_radius - (c[0]*c[0] + c[1]*c[1] + c[2]*c[2]);
+    if(inside<0 && v<0) return -1.0f;
+    float d = inside + v*v;
+    if(d<0) return -1.0f;
+    return v - sqrt(d); // Verify: could this be negative also?????
+}
+
+/// Return true if the specific "edit helper", i.e. box for scaling/rotating/moving is activated
+bool edit_helper_is_active(const EditHelper &edit_helper, const Camera &cam) {
+    // forward dir of the camera in world coordinates.
+    Vector3 forward_dir = cam.get_orientation_matrix()[2];
+    return raysphereintersect(edit_helper.position, edit_helper.radius, cam.position, forward_dir) > 0;
+}
+
 
 
 class PrimitivesExample: public Platform::Application {
@@ -216,14 +253,16 @@ private:
     Camera camera;
     RendererWorld world;
     // the rendered axis
-    RendererUIData axis[3];
+    // RendererUIData axis[3];
+    EditHelper scale_helpers_around_box[4];
 
     Vector2i _previousMousePosition;
 };
 
 PrimitivesExample::PrimitivesExample(const Arguments& arguments):
         Platform::Application{arguments, Configuration{}.setTitle("Magnum Primitives Example")},
-        camera(Vector2{windowSize()}.aspectRatio())
+        camera(Vector2{windowSize()}.aspectRatio()),
+        scale_helpers_around_box({EditHelper{{-1, -1, -1}}, EditHelper{{1, -1, -1}}, EditHelper{{-1, 1, -1}}, EditHelper{{1, -1, -1}}, })
 {
     GL::Renderer::enable(GL::Renderer::Feature::DepthTest);
     GL::Renderer::enable(GL::Renderer::Feature::FaceCulling);
@@ -240,13 +279,16 @@ void PrimitivesExample::drawEvent() {
             .setProjectionMatrix(_projection);
     world._mesh.draw(world._shader);
 
-    const auto rotation_matrix = Matrix4::rotationY(-camera.roll)
-                                             * Matrix4::rotationX(camera.pitch)
-                                             * Matrix4::rotationZ(camera.yaw);
+    for (auto &edit_helper : scale_helpers_around_box) {
+        edit_helper._shader.setTransformationProjectionMatrix(_projection * _transformation * Matrix4::translation(edit_helper.position));
+        edit_helper._shader.setColor(edit_helper_is_active(edit_helper, camera) ? Color4(1, 0, 0, 1) : Color4(1, 1, 1, 1));
+        edit_helper._mesh.draw(edit_helper._shader);
+    }
+    /*
     axis[0]._shader.setTransformationProjectionMatrix(_projection * _transformation);
     axis[0]._mesh.draw(axis[0]._shader);
     axis[1]._shader.setTransformationProjectionMatrix(_projection);
-    axis[1]._mesh.draw(axis[1]._shader);
+    axis[1]._mesh.draw(axis[1]._shader);*/
 
     swapBuffers();
 }
@@ -303,4 +345,20 @@ generic renderables:
      * wohin constructor für beides?
      * wohin draw functions? draw(camera, shader)
 
+generic collisions:
+
+struct CollisionShape {
+    // Bounding Box
+};
+float rayintersect(const Vector3 &ray_origin, const Vector3 &ray_dir, const CollisionShape &colliding_object,
+                   float precision=0.25f, float max_distance=40.0f) {
+
+    const uint32_t MAX_STEPS = max_distance / precision;
+    Vector3 current_point = ray_origin;
+    for(uint32_t step = 0; step < MAX_STEPS; step++, current_point += ray_dir * precision) {
+        if (colliding_object.isinside(current_point))
+            return step * precision; // return the distance to the origin
+    }
+    return -1.0f;
+}
 */
