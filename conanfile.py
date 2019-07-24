@@ -39,15 +39,27 @@ class PocConan(ConanFile):
     # Options may need to change depending on the packaged library.
     settings = "os", "arch", "compiler", "build_type"
     options = { }
-    default_options = {"magnum:build_plugins_static":True,# magnum:with_glfwapplication=True
-                       "magnum:with_sdl2application":False, "magnum:with_emscriptenapplication":True}
+    default_options = {"magnum:with_sdl2application":False}
 
     requires = (
-        "magnum/2019.07_inofficial@inexorgame/testing"
+        
     )
 
     _build_subfolder = "build_subfolder"
 
+    def requirements(self):
+        if self.settings.os == "Emscripten":
+            self.requires("magnum/2019.07_inofficial@inexorgame/testing")
+        else:
+            self.requires("magnum/2019.01@inexorgame/testing")
+
+    def config_options(self):
+        if self.settings.os == "Emscripten":
+            self.options["magnum"].with_emscriptenapplication = True
+            self.options["magnum"].with_glfwapplication = False
+        else:
+            self.options["magnum"].with_emscriptenapplication = False
+            self.options["magnum"].with_glfwapplication = True
 
     def _configure_cmake(self):
         cmake = CMake(self)
