@@ -4,7 +4,6 @@
 #include <Magnum/GL/Renderer.h>
 #include <Magnum/MeshTools/Interleave.h>
 #include <Magnum/MeshTools/CompressIndices.h>
-#include <Magnum/Platform/GlfwApplication.h>
 #include <Magnum/Primitives/Axis.h>
 #include <Magnum/Primitives/Cube.h>
 #include <Magnum/Primitives/Icosphere.h>
@@ -16,6 +15,12 @@
 #include <iostream>
 #include <vector>
 #include <unordered_map>
+
+#ifdef TARGET_WEB
+#include <Magnum/Platform/EmscriptenApplication.h>
+#else
+#include <Magnum/Platform/GlfwApplication.h>
+#endif
 
 using namespace Magnum;
 using namespace Magnum::Math::Literals;
@@ -168,10 +173,10 @@ struct RendererWorld {
         _indexBuffer.setData(indexData);
 
         _mesh.setPrimitive(cube.primitive())
-                .setCount(cube.indices().size())
+                .setCount(3)
                 .addVertexBuffer(_vertexBuffer, 0, Shaders::Phong::Position{},
                                  Shaders::Phong::Normal{})
-                .setIndexBuffer(_indexBuffer, 0, indexType, indexStart, indexEnd);
+                ; // .setIndexBuffer(_indexBuffer, 0, indexType, indexStart, indexEnd);
 
         _color = Color3::fromHsv({35.0_degf, 1.0f, 0.3f});
         _shader.setLightPosition({7.0f, 5.0f, 2.5f})
@@ -201,7 +206,7 @@ struct RendererUIData {
         _mesh.setPrimitive(data.primitive())
                 .setCount(data.indices().size())
                 .addVertexBuffer(_vertexBuffer, 0, Shaders::Flat3D::Position{}) // , Shaders::VertexColor3D::Color4{})
-                .setIndexBuffer(_indexBuffer, 0, indexType, indexStart, indexEnd);
+                ; // .setIndexBuffer(_indexBuffer, 0, indexType, indexStart, indexEnd);
     }
 };
 
@@ -262,7 +267,7 @@ private:
 PrimitivesExample::PrimitivesExample(const Arguments& arguments):
         Platform::Application{arguments, Configuration{}.setTitle("Magnum Primitives Example")},
         camera(Vector2{windowSize()}.aspectRatio()),
-        scale_helpers_around_box({EditHelper{{-1, -1, -1}}, EditHelper{{1, -1, -1}}, EditHelper{{-1, 1, -1}}, EditHelper{{1, -1, -1}}, })
+        scale_helpers_around_box{EditHelper{{-1, -1, -1}}, EditHelper{{1, -1, -1}}, EditHelper{{-1, 1, -1}}, EditHelper{{1, -1, -1}}}
 {
     GL::Renderer::enable(GL::Renderer::Feature::DepthTest);
     GL::Renderer::enable(GL::Renderer::Feature::FaceCulling);
@@ -279,11 +284,11 @@ void PrimitivesExample::drawEvent() {
             .setProjectionMatrix(_projection);
     world._mesh.draw(world._shader);
 
-    for (auto &edit_helper : scale_helpers_around_box) {
+    /*for (auto &edit_helper : scale_helpers_around_box) {
         edit_helper._shader.setTransformationProjectionMatrix(_projection * _transformation * Matrix4::translation(edit_helper.position));
         edit_helper._shader.setColor(edit_helper_is_active(edit_helper, camera) ? Color4(1, 0, 0, 1) : Color4(1, 1, 1, 1));
         edit_helper._mesh.draw(edit_helper._shader);
-    }
+    }*/
     /*
     axis[0]._shader.setTransformationProjectionMatrix(_projection * _transformation);
     axis[0]._mesh.draw(axis[0]._shader);

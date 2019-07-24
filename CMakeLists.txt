@@ -12,12 +12,19 @@ set(BINARY_NAME "inexor-poc-basic-player")
 
 # Download conan executer in case it does not exists
 if(NOT EXISTS "${CMAKE_CURRENT_BINARY_DIR}/conan.cmake")
-   message(STATUS "Downloading conan.cmake from https://github.com/conan-io/cmake-conan")
-   file(DOWNLOAD "https://raw.githubusercontent.com/conan-io/cmake-conan/v0.13/conan.cmake"
-                 "${CMAKE_CURRENT_BINARY_DIR}/conan.cmake")
+    message(STATUS "Downloading conan.cmake from https://github.com/conan-io/cmake-conan")
+    file(DOWNLOAD "https://raw.githubusercontent.com/conan-io/cmake-conan/v0.13/conan.cmake"
+                  "${CMAKE_CURRENT_BINARY_DIR}/conan.cmake")
 endif()
 
 include(${CMAKE_CURRENT_BINARY_DIR}/conan.cmake)
+
+if(TARGET_WEB)
+    list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/toolchains/modules/")
+    include(UseEmscripten)
+    add_definitions("-DDEMANGLE_SUPPORT=1" "-DTARGET_WEB")
+endif(TARGET_WEB)
+
 
 # Required for conan cmake for handling an empty CMAKE_BUILD_TYPE
 if (NOT CMAKE_BUILD_TYPE)
