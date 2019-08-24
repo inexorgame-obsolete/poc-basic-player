@@ -42,7 +42,8 @@ class PocConan(ConanFile):
     default_options = {"magnum:with_sdl2application":False}
 
     requires = (
-        
+        "boost_geometry/1.66.0@bincrafters/stable",
+        "doctest/2.3.1@bincrafters/stable"
     )
 
     _build_subfolder = "build_subfolder"

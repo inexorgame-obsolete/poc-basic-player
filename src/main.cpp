@@ -21,6 +21,8 @@
 #else
 #include <Magnum/Platform/GlfwApplication.h>
 #endif
+#define DOCTEST_CONFIG_IMPLEMENT
+#include <doctest/doctest.h>
 
 using namespace Magnum;
 using namespace Magnum::Math::Literals;
@@ -173,10 +175,10 @@ struct RendererWorld {
         _indexBuffer.setData(indexData);
 
         _mesh.setPrimitive(cube.primitive())
-                .setCount(3)
+                .setCount(cube.indices().size())
                 .addVertexBuffer(_vertexBuffer, 0, Shaders::Phong::Position{},
                                  Shaders::Phong::Normal{})
-                ; // .setIndexBuffer(_indexBuffer, 0, indexType, indexStart, indexEnd);
+                .setIndexBuffer(_indexBuffer, 0, indexType, indexStart, indexEnd);
 
         _color = Color3::fromHsv({35.0_degf, 1.0f, 0.3f});
         _shader.setLightPosition({7.0f, 5.0f, 2.5f})
@@ -334,7 +336,22 @@ void PrimitivesExample::mouseMoveEvent(MouseMoveEvent& event) {
     redraw(); // TODO: remove and make continously draw..
 }
 
-MAGNUM_APPLICATION_MAIN(PrimitivesExample)
+
+int main(int argc, char **argv) {
+    doctest::Context context;
+    context.applyCommandLine(argc, argv);
+
+    int res = context.run(); // run doctest
+
+    // important - query flags (and --exit) rely on the user doing this
+    if (context.shouldExit()) {
+        // propagate the result of the tests
+        return res;
+    }
+    PrimitivesExample app({argc, argv});                                        \
+    return app.exec();
+}
+// MAGNUM_APPLICATION_MAIN(PrimitivesExample)
 
 
 /* inactive code:
