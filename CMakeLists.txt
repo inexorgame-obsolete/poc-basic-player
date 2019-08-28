@@ -65,7 +65,7 @@ file(GLOB_RECURSE NORMAL_SOURCE_FILES
 message(STATUS "NORMAL SOURCE FILES: ${NORMAL_SOURCE_FILES}")
 message(STATUS "CONAN_LIBS: ${CONAN_LIBS}")
  
-add_executable(${BINARY_NAME} ${NORMAL_SOURCE_FILES})
+add_executable(${BINARY_NAME} ${NORMAL_SOURCE_FILES} src/edit_model.cpp)
 target_link_libraries(${BINARY_NAME} ${CONAN_LIBS})
 
 # Use folder structure in Visual Studio
