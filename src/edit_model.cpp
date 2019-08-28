@@ -32,41 +32,51 @@ struct Node {
     OPERATION operation;
     /// The parent node is the owner of its child nodes.
     /// It has childs if operation is not NO_OP, in which case primitive is not nullptr.
-    std::unique_ptr<Node> left, right;
+    Node const *left, *right;
 
     /// This points to the primitive if this node is a leaf (i.e. operation is NO_OP).
     /// TODO: The node should not own the primitive, since many Trees could exist simultaneously and
     /// the primitive should not be needed to be copied then.-> make it a weak ptr and let it be owned somewhere else.
-    std::unique_ptr<PrimitiveCube> primitive;
+    PrimitiveCube *primitive;
 
-    Node(const OPERATION op, const std::unique_ptr<Node> &l, const std::unique_ptr<Node> &r) :
+    /*
+    Node(const OPERATION op, const std::shared_ptr<Node> &l, const std::shared_ptr<Node> &r) :
             operation(op), left(nullptr), right(nullptr), primitive(nullptr)
     {
         // copy the old stuff!
-        if(l) left = std::make_unique<Node>(l.get());
-        if(r) right = std::make_unique<Node>(r.get());
+        if(l) left = std::make_shared<Node>(*l);
+        if(r) right = std::make_shared<Node>(*r);
     }
     explicit Node(const Node &n): operation(n.operation), left(nullptr), right(nullptr), primitive(nullptr)
     {
         // copy the old stuff!
-        if(n.left != nullptr) left = std::make_unique<Node>(n.left.get());
-        if(n.right != nullptr) right = std::make_unique<Node>(n.right.get());
-        if(n.primitive) primitive = std::make_unique<PrimitiveCube>(n.primitive.get());
+        if(n.left) left = std::make_shared<Node>(*n.left);
+        if(n.right) right = std::make_shared<Node>(*n.right);
+        if(n.primitive) primitive = std::make_shared<PrimitiveCube>(*n.primitive);
     }
     Node(Node &&) = default;
+
+     */
 };
 
-std::unique_ptr<Node> tree_root;
+Node *create_new_node(const OPERATION op, const Node *l, const Node *r)
+{
+    // copy the old stuff!
+    Node *n = new Node();
+    n->primitive = nullptr;
+    n->left = l ? new Node(*l) : nullptr;
+    n->right = r ? new Node(*r) : nullptr;
+    return n;
+}
 
-std::unique_ptr<Node> create_new_simplified_node(std::unique_ptr<Node> &node)
+Node *create_new_simplified_node(Node const * const node)
 {
     /// The Goldfeather Algorithm
     /// Taken from OpenCSG: A Library for Image-Based CSG Rendering, 2.2
     /// https://www.usenix.org/legacy/event/usenix05/tech/freenix/full_papers/kirsch/kirsch.pdf
-
+    // assert(node);
     if (!node->left || !node->right) {
-        auto x(*node);
-        return std::make_unique<Node>(x);
+        return new Node(*node);
     }
 
     // - = Substraction
@@ -77,67 +87,67 @@ std::unique_ptr<Node> create_new_simplified_node(std::unique_ptr<Node> &node)
     if (node->operation == SUBSTRACTION &&
         node->right->operation == UNION)
     {
-        auto new_left_node = std::make_unique<Node>(SUBSTRACTION, node->left, node->right->left);
-        return std::make_unique<Node>(SUBSTRACTION, new_left_node, node->right->right);
+        auto new_left_node = create_new_node(SUBSTRACTION, node->left, node->right->left);
+        return create_new_node(SUBSTRACTION, new_left_node, node->right->right);
     }
 
     // Rule 2: x a (y u z) ---> (x a y) u (x a z)
     if (node->operation == INTERSECTION &&
         node->right->operation == UNION)
     {
-        auto new_left_node = std::make_unique<Node>(INTERSECTION, node->left, node->right->left);
-        auto new_right_node = std::make_unique<Node>(INTERSECTION, node->left, node->right->right);
-        return std::make_unique<Node>(UNION, new_left_node, new_right_node);
+        auto new_left_node = create_new_node(INTERSECTION, node->left, node->right->left);
+        auto new_right_node = create_new_node(INTERSECTION, node->left, node->right->right);
+        return create_new_node(UNION, new_left_node, new_right_node);
     }
     // Rule 3: x - (y a z) ---> (x - y) u (x - z)
     if (node->operation == SUBSTRACTION &&
         node->right->operation == INTERSECTION)
     {
-        auto new_left_node = std::make_unique<Node>(SUBSTRACTION, node->left, node->right->left);
-        auto new_right_node = std::make_unique<Node>(SUBSTRACTION, node->left, node->right->right);
-        return std::make_unique<Node>(UNION, new_left_node, new_right_node);
+        auto new_left_node = create_new_node(SUBSTRACTION, node->left, node->right->left);
+        auto new_right_node = create_new_node(SUBSTRACTION, node->left, node->right->right);
+        return create_new_node(UNION, new_left_node, new_right_node);
     }
 
     // Rule 4: x a (y a z) ---> (x a y) a z
     if (node->operation == INTERSECTION &&
         node->right->operation == INTERSECTION)
     {
-        auto new_left_node = std::make_unique<Node>(INTERSECTION, node->left, node->right->left);
-        return std::make_unique<Node>(INTERSECTION, new_left_node, node->right->right);
+        auto new_left_node = create_new_node(INTERSECTION, node->left, node->right->left);
+        return create_new_node(INTERSECTION, new_left_node, node->right->right);
     }
 
     // Rule 5: x - (y - z) ---> (x - y) u (x a z)
     if (node->operation == SUBSTRACTION &&
         node->right->operation == SUBSTRACTION)
     {
-        auto new_left_node = std::make_unique<Node>(SUBSTRACTION, node->left, node->right->left);
-        auto new_right_node = std::make_unique<Node>(INTERSECTION, node->left, node->right->right);
-        return std::make_unique<Node>(UNION, new_left_node, new_right_node);
+        auto new_left_node = create_new_node(SUBSTRACTION, node->left, node->right->left);
+        auto new_right_node = create_new_node(INTERSECTION, node->left, node->right->right);
+        return create_new_node(UNION, new_left_node, new_right_node);
     }
 
     // Rule 6: x a (y - z) ---> (x a y) - z
     if (node->operation == INTERSECTION &&
         node->right->operation == SUBSTRACTION)
     {
-        auto new_left_node = std::make_unique<Node>(SUBSTRACTION, node->left, node->right->left);
-        return std::make_unique<Node>(SUBSTRACTION, new_left_node, node->right->right);
+        auto new_left_node = create_new_node(SUBSTRACTION, node->left, node->right->left);
+        return create_new_node(SUBSTRACTION, new_left_node, node->right->right);
     }
 
     // Rule 7: (x-y) a z ---> (x a z) - y
     if (node->operation == INTERSECTION &&
         node->left->operation == SUBSTRACTION)
     {
-        auto new_left_node = std::make_unique<Node>(INTERSECTION, node->left->left, node->right);
-        return std::make_unique<Node>(SUBSTRACTION, new_left_node, node->right);
+        auto new_left_node = create_new_node(INTERSECTION, node->left->left, node->right);
+        return create_new_node(SUBSTRACTION, new_left_node, node->right);
     }
 
     // Rule 8: (x u y) - z ---> (x - z) u (y - z)
     if (node->operation == SUBSTRACTION &&
         node->left->operation == UNION)
     {
-        auto new_left_node = std::make_unique<Node>(SUBSTRACTION, node->left->left, node->right);
-        auto new_right_node = std::make_unique<Node>(SUBSTRACTION, node->left->right, node->right);
-        return std::make_unique<Node>(UNION, new_left_node, new_right_node);
+        auto new_left_node = create_new_node(SUBSTRACTION, node->left->left, node->right);
+        auto new_right_node = create_new_node(SUBSTRACTION, node->left->right, node->right);
+        return create_new_node(UNION, new_left_node, new_right_node);
     }
 
     // Rule 9: (x u y) a z ---> (x a z) u (y a z)
@@ -145,30 +155,37 @@ std::unique_ptr<Node> create_new_simplified_node(std::unique_ptr<Node> &node)
         node->left->operation == UNION)
     {
 
-        auto new_left_node = std::make_unique<Node>(INTERSECTION, node->left->left, node->right);
-        auto new_right_node = std::make_unique<Node>(INTERSECTION, node->left->right, node->right);
-        return std::make_unique<Node>(UNION, new_left_node, new_right_node);
+        auto new_left_node = create_new_node(INTERSECTION, node->left->left, node->right);
+        auto new_right_node = create_new_node(INTERSECTION, node->left->right, node->right);
+        return create_new_node(UNION, new_left_node, new_right_node);
     }
 }
 
 /// Always replace the childs if you got any (recursively).
-void normalize_node(std::unique_ptr<Node> &current_node) {
+Node *create_normalized_node(Node const * const current_node)
+{
     if (current_node->operation == NO_OP)
-        return;
+        // no children to copy
+        return new Node(*current_node);;
+
     // be recursive: if they got childs, replace them first.
-    normalize_node(current_node->left);
-    normalize_node(current_node->right);
-    auto p = create_new_simplified_node(current_node);
-    std::swap(current_node, p);
+    Node *left = create_normalized_node(current_node->left);
+    Node *right = create_normalized_node(current_node->right);
+    Node *cloned_node = create_new_simplified_node(current_node);
+    cloned_node->left = left;
+    cloned_node->right = right;
+    return cloned_node;
 }
 
-void normalize_tree(std::unique_ptr<Node> &tree_root)
+Node *create_normalized_tree(Node const * const tree_root)
 {
-
+    // assert(tree_root != nullptr);
+    Node *new_tree_root = create_normalized_node(tree_root);
+    return new_tree_root;
     // walk the tree in postorder
-    for(std::unique_ptr<Node> *ptr = &tree_root;  (*ptr)->right != nullptr; ptr = &((*ptr)->right)) {
-        normalize_node(*ptr);
-    }
+    //for(const Node *ptr = tree_root;  ptr->right != nullptr; ptr = ptr->right) {
+        //    create_normalized_node(ptr);
+        //}
 
     // auto ptr = tree_root;
     // for(ptr; ptr->right != nullptr; ptr = ptr->right) {}
@@ -176,26 +193,24 @@ void normalize_tree(std::unique_ptr<Node> &tree_root)
 
 TEST_CASE("Testing normalizing a tree") {
     // setup
-    auto leaf_node_1 = std::make_unique<Node>(NO_OP, nullptr, nullptr);
-    auto leaf_node_2 = std::make_unique<Node>(NO_OP, nullptr, nullptr);
-    auto op_node_1 = std::make_unique<Node>(UNION, leaf_node_1, leaf_node_2);
-    auto leaf_node_3 = std::make_unique<Node>(NO_OP, nullptr, nullptr);
-    auto leaf_node_4 = std::make_unique<Node>(NO_OP, nullptr, nullptr);
-    auto op_node_2 = std::make_unique<Node>(UNION, leaf_node_3, leaf_node_4);
-    auto leaf_node_5 = std::make_unique<Node>(NO_OP, nullptr, nullptr);
-    auto leaf_node_6 = std::make_unique<Node>(NO_OP, nullptr, nullptr);
-    auto op_node_3 = std::make_unique<Node>(INTERSECTION, leaf_node_5, leaf_node_6);
+    auto leaf_node_1 = create_new_node(NO_OP, nullptr, nullptr);
+    auto leaf_node_2 = create_new_node(NO_OP, nullptr, nullptr);
+    auto op_node_1 = create_new_node(UNION, leaf_node_1, leaf_node_2);
+    auto leaf_node_3 = create_new_node(NO_OP, nullptr, nullptr);
+    auto leaf_node_4 = create_new_node(NO_OP, nullptr, nullptr);
+    auto op_node_2 = create_new_node(UNION, leaf_node_3, leaf_node_4);
+    auto leaf_node_5 = create_new_node(NO_OP, nullptr, nullptr);
+    auto leaf_node_6 = create_new_node(NO_OP, nullptr, nullptr);
+    auto op_node_3 = create_new_node(INTERSECTION, leaf_node_5, leaf_node_6);
     // this operation is an operation between only non-leaves! Thats what we want to erase.
-    auto op_node_fat = std::make_unique<Node>(UNION, op_node_3, op_node_2);
-    auto op_node_fat_2 = std::make_unique<Node>(UNION, op_node_fat, op_node_1);
+    auto op_node_fat = create_new_node(UNION, op_node_3, op_node_2);
+    auto op_node_fat_2 = create_new_node(UNION, op_node_fat, op_node_1);
 
     // lets see whether the tree is normalized afterwards
-    normalize_tree(op_node_fat_2);
+    auto result = create_normalized_tree(op_node_fat_2);
 
-    std::unique_ptr<Node> *ptr = &op_node_fat_2;
-    while(ptr)
-    {
-        DOCTEST_CHECK((*ptr)->right->operation == NO_OP);
-        ptr = &((*ptr)->left);
+    for(const Node *ptr = result;  ptr->left != nullptr; ptr = ptr->left) {
+        DOCTEST_CHECK(ptr->right->operation == NO_OP);
+        DOCTEST_CHECK(ptr)
     };
 }
