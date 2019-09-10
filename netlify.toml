@@ -6,4 +6,4 @@
   # been specified, include it in the publish directory path.
   publish = "build/bin"
   # Default build command.
-  command = "netlify_build.sh"
+  command = "sh ./netlify_build.sh"
