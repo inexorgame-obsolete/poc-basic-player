@@ -18,11 +18,17 @@ if(NOT EXISTS "${CMAKE_CURRENT_BINARY_DIR}/conan.cmake")
 endif()
 
 include(${CMAKE_CURRENT_BINARY_DIR}/conan.cmake)
+if($ENV{TARGET_WEB})
+  set(TARGET_WEB 1)
+endif()
 
 if(TARGET_WEB)
     list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/toolchains/modules/")
     include(UseEmscripten)
     add_definitions("-DDEMANGLE_SUPPORT=1" "-DTARGET_WEB")
+    set(CONAN_PROFILE "emscripten.profile")
+else()
+    set(CONAN_PROFILE "default")
 endif(TARGET_WEB)
 
 
@@ -45,14 +51,14 @@ if(UNIX AND NOT APPLE)
 	conan_cmake_run(CONANFILE conanfile.py
         	        BASIC_SETUP
                 	BUILD outdated
-                	PROFILE default
+                	PROFILE ${CONAN_PROFILE}
                 	PROFILE_AUTO build_type
 			SETTINGS compiler.libcxx=${LIBCXX})
 else()
 	conan_cmake_run(CONANFILE conanfile.py
 			BASIC_SETUP
 			BUILD outdated
-			PROFILE default
+			PROFILE ${CONAN_PROFILE}
 			PROFILE_AUTO build_type)
 endif()
 
