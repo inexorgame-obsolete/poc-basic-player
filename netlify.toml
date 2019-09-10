@@ -7,7 +7,7 @@
   publish = "build/bin"
 
   # Default build command.
-  command = "echo 'default context'"
+  command = "mkdir -p build/bin; mv src/web build/bin"
 
   # Directory with the serverless Lambda functions to deploy to AWS.
   functions = "project/functions/"

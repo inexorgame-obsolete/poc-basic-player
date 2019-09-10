@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8" />
+    <title>BasicPlayer PoC</title>
+    <link rel="stylesheet" href="https://raw.githubusercontent.com/mosra/magnum/07b3253714fef2af4febbd5a9e3e361d3d6cbc63/src/Magnum/Platform/WebApplication.css" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+</head>
+
+<body>
+    <h1>Inexor Basic Player PoC</h1>
+    <div id="container">
+        <div id="sizer">
+            <div id="expander">
+                <div id="listener">
+                    <canvas id="canvas"></canvas>
+                    <div id="status">Initialization...</div>
+                    <div id="status-description"></div>
+                    <script src="https://raw.githubusercontent.com/mosra/magnum/07b3253714fef2af4febbd5a9e3e361d3d6cbc63/src/Magnum/Platform/EmscriptenApplication.js"></script>
+                    <script async="async" src="inexor-poc-basic-player.js"></script>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+
+</html>
